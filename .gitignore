@@ -1,0 +1,14 @@
+# Ignore Node.js dependencies (can be recreated with npm install)
+node_modules
+
+# Ignore environment variable files, they may contain passwords and API keys
+.env
+
+# Ignore log files (temporary runtime/debugging output)
+*.log
+
+# Ignore private key files, so a key can never be committed by mistake
+*.pem
+
+# Ignore macOS system metadata files
+.DS_Store

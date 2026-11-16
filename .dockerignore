@@ -1,0 +1,14 @@
+# Exclude Git repository metadata, not needed inside the Docker build context
+.git
+.gitignore
+
+# Exclude local dependencies and logs
+node_modules
+*.log
+
+# Exclude documentation, Kubernetes files and pipeline config, not needed inside the image
+README.md
+docs
+screenshots
+k8s
+buildspec.yml
