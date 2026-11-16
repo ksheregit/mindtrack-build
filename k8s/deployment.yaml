@@ -1,0 +1,28 @@
+# Deployment: tells Kubernetes which container image to run and how many copies (pods)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mindtrack
+  namespace: mindtrack          # keeps this project separate from other projects on the cluster
+spec:
+  replicas: 2                   # run 2 identical pods for availability
+  selector:
+    matchLabels:
+      app: mindtrack
+  template:
+    metadata:
+      labels:
+        app: mindtrack
+    spec:
+      containers:
+        - name: mindtrack
+          image: 060119699137.dkr.ecr.ap-south-1.amazonaws.com/mindtrack:latest   # image pushed to ECR
+          imagePullPolicy: Always                # always pull the newest image when a pod starts
+          ports:
+            - containerPort: 3000                # nginx inside the container listens on 3000
+          readinessProbe:                        # only send traffic once the app answers
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10

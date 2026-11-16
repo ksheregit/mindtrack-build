@@ -1,0 +1,15 @@
+# Service: gives the pods one stable address and exposes them to the internet through a load balancer
+apiVersion: v1
+kind: Service
+metadata:
+  name: mindtrack-service
+  namespace: mindtrack
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"   # creates a Network Load Balancer (it has an ARN for the submission)
+spec:
+  type: LoadBalancer
+  selector:
+    app: mindtrack          # sends traffic to pods with this label
+  ports:
+    - port: 3000            # port exposed on the load balancer
+      targetPort: 3000      # port of the container

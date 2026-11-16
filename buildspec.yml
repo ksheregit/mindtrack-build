@@ -1,0 +1,58 @@
+# buildspec.yml - the instruction sheet CodeBuild follows on every build.
+# CodeBuild starts a fresh temporary machine, runs these commands top to bottom, then throws the machine away.
+# Values like $AWS_REGION and $ECR_URI come from the environment variables set in the CodeBuild project.
+
+version: 0.2                      # buildspec format version (0.2 is the current one)
+
+env:
+  variables:
+    AWS_REGION: "ap-south-1"
+    EKS_CLUSTER_NAME: "guvi-eks"
+    DEPLOYMENT_NAME: "mindtrack"
+    CONTAINER_NAME: "mindtrack"
+    ECR_URI: "060119699137.dkr.ecr.ap-south-1.amazonaws.com/mindtrack"
+
+phases:
+
+  pre_build:                      # runs first: get ready before building
+    commands:
+      - echo Logging in to Amazon ECR...
+      # Docker must prove who it is before it can push images to ECR.
+      # aws ecr get-login-password makes a temporary password; docker login uses it.
+      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_URI
+
+      # Give every image a unique tag: the first 7 characters of the Git commit ID.
+      # CODEBUILD_RESOLVED_SOURCE_VERSION is set automatically by CodeBuild.
+      # Unique tags matter because Kubernetes only redeploys when the image name changes.
+      - IMAGE_TAG=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - echo Image tag is $IMAGE_TAG
+
+  build:                          # second: create the Docker image
+    commands:
+      - echo Building the Docker image...
+      # Builds from the Dockerfile in the repo root ("."), with two names:
+      # the unique commit tag (for deployment) and "latest" (for convenience).
+      - docker build -t $ECR_URI:$IMAGE_TAG -t $ECR_URI:latest .
+
+  post_build:                     # third: publish the image and deploy it
+    commands:
+      - echo Pushing the image to ECR...
+      # Upload both tags to ECR so the EKS nodes can pull the new image.
+      - docker push $ECR_URI:$IMAGE_TAG
+      - docker push $ECR_URI:latest
+
+      - echo Deploying to EKS...
+      # Writes the cluster connection details so kubectl knows which cluster to talk to.
+      # It uses the CodeBuild role's AWS permissions to log in.
+      - aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_REGION
+
+      # Applies the Deployment and Service files, so any change you make to the YAML is deployed too.
+      - kubectl apply -f k8s/
+
+      # Points the deployment at the new unique image tag. The changed image triggers a
+      # rolling update: new pods start first, then the old ones are removed (no downtime).
+      - kubectl set image deployment/$DEPLOYMENT_NAME $CONTAINER_NAME=$ECR_URI:$IMAGE_TAG -n mindtrack
+
+      # Waits until the new pods are running. If they never become ready, this fails the build,
+      # so a broken deployment shows up as a red build instead of passing silently.
+      - kubectl rollout status deployment/$DEPLOYMENT_NAME -n mindtrack --timeout=180s
